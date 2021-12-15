@@ -23,7 +23,7 @@ use {
             libsecp256k1_0_5_upgrade_enabled, mem_overlap_fix, memory_ops_syscalls,
             return_data_syscall_enabled, secp256k1_recover_syscall_enabled,
             set_upgrade_authority_via_cpi_enabled, sol_log_data_syscall_enabled,
-            sysvar_via_syscall, update_data_on_realloc,
+            sysvar_via_syscall, update_data_on_realloc, update_syscall_base_costs,
         },
         hash::{Hasher, HASH_BYTES},
         ic_msg,
@@ -657,7 +657,16 @@ impl<'a> SyscallObject<BpfError> for SyscallPanic<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
-        question_mark!(self.compute_meter.consume(len), result);
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        if !invoke_context.is_feature_active(&update_syscall_base_costs::id())
+        {
+            question_mark!(self.compute_meter.consume(len), result);
+        }
         *result = translate_string_and_do(
             memory_mapping,
             file,
@@ -687,7 +696,22 @@ impl<'a> SyscallObject<BpfError> for SyscallLog<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
-        question_mark!(self.compute_meter.consume(len), result);
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let cost = if invoke_context.is_feature_active(&update_syscall_base_costs::id())
+        {
+            invoke_context
+                .get_compute_budget()
+                .syscall_base_cost
+                .max(len)
+        } else {
+            len
+        };
+        question_mark!(self.compute_meter.consume(cost), result);
         question_mark!(
             translate_string_and_do(
                 memory_mapping,
@@ -752,6 +776,18 @@ impl SyscallObject<BpfError> for SyscallLogBpfComputeUnits {
         _memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let cost = if invoke_context.is_feature_active(&update_syscall_base_costs::id())
+        {
+            invoke_context.get_compute_budget().syscall_base_cost
+        } else {
+            0
+        };
         question_mark!(self.compute_meter.consume(self.cost), result);
         let logger = question_mark!(
             self.logger
@@ -1093,7 +1129,31 @@ impl<'a> SyscallObject<BpfError> for SyscallSha256<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(self.sha256_base_cost), result);
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let compute_budget = invoke_context.get_compute_budget();
+        question_mark!(
+            invoke_context
+                .get_compute_meter()
+                .consume(compute_budget.sha256_base_cost),
+            result
+        );
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let hash_result = question_mark!(
             translate_slice_mut::<u8>(
                 memory_mapping,
@@ -1127,11 +1187,16 @@ impl<'a> SyscallObject<BpfError> for SyscallSha256<'a> {
                     ),
                     result
                 );
+<<<<<<< HEAD
                 question_mark!(
                     self.compute_meter
                         .consume(self.sha256_byte_cost * (val.len() as u64 / 2)),
                     result
                 );
+=======
+                let cost = compute_budget.sha256_byte_cost * (val.len() as u64 / 2);
+                question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+>>>>>>> 2aa113fd8 (Update syscall base costs)
                 hasher.hash(bytes);
             }
         }
@@ -1306,7 +1371,31 @@ impl<'a> SyscallObject<BpfError> for SyscallKeccak256<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(self.base_cost), result);
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let compute_budget = invoke_context.get_compute_budget();
+        question_mark!(
+            invoke_context
+                .get_compute_meter()
+                .consume(compute_budget.sha256_base_cost),
+            result
+        );
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let hash_result = question_mark!(
             translate_slice_mut::<u8>(
                 memory_mapping,
@@ -1334,11 +1423,17 @@ impl<'a> SyscallObject<BpfError> for SyscallKeccak256<'a> {
                     ),
                     result
                 );
+<<<<<<< HEAD
                 question_mark!(
                     self.compute_meter
                         .consume(self.byte_cost * (val.len() as u64 / 2)),
                     result
                 );
+=======
+                let cost = compute_budget.sha256_byte_cost * (val.len() as u64 / 2);
+                question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+
+>>>>>>> 2aa113fd8 (Update syscall base costs)
                 hasher.hash(bytes);
             }
         }
@@ -1350,6 +1445,24 @@ impl<'a> SyscallObject<BpfError> for SyscallKeccak256<'a> {
 fn check_overlapping(src_addr: u64, dst_addr: u64, n: u64) -> bool {
     (src_addr <= dst_addr && src_addr + n > dst_addr)
         || (dst_addr <= src_addr && dst_addr + n > src_addr)
+}
+
+fn mem_op_consume<'a, 'b>(
+    invoke_context: &Ref<&'a mut InvokeContext<'b>>,
+    n: u64,
+) -> Result<(), EbpfError<BpfError>> {
+    let compute_budget = invoke_context.get_compute_budget();
+    let cost = if invoke_context
+        .feature_set
+        .is_active(&update_syscall_base_costs::id())
+    {
+        compute_budget
+            .mem_op_base_cost
+            .max(n / compute_budget.cpi_bytes_per_unit)
+    } else {
+        n / compute_budget.cpi_bytes_per_unit
+    };
+    invoke_context.get_compute_meter().consume(cost)
 }
 
 /// memcpy
@@ -1370,8 +1483,39 @@ impl<'a> SyscallObject<BpfError> for SyscallMemcpy<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         if if self.mem_overlap_fix {
             check_overlapping(src_addr, dst_addr, n)
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        // When deprecating `update_syscall_base_costs` switch to `mem_op_consume`
+        let compute_budget = invoke_context.get_compute_budget();
+        let update_syscall_base_costs = invoke_context
+            .feature_set
+            .is_active(&update_syscall_base_costs::id());
+        if update_syscall_base_costs {
+            let cost = compute_budget
+                .mem_op_base_cost
+                .max(n / compute_budget.cpi_bytes_per_unit);
+            question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+        }
+
+        let use_fixed_nonoverlapping_check = invoke_context
+            .feature_set
+            .is_active(&fixed_memcpy_nonoverlapping_check::id());
+
+        #[allow(clippy::collapsible_else_if)]
+        if use_fixed_nonoverlapping_check {
+            if !is_nonoverlapping(src_addr, dst_addr, n) {
+                *result = Err(SyscallError::CopyOverlapping.into());
+                return;
+            }
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         } else {
             dst_addr + n > src_addr && src_addr > dst_addr
         } {
@@ -1379,7 +1523,22 @@ impl<'a> SyscallObject<BpfError> for SyscallMemcpy<'a> {
             return;
         }
 
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(n / self.cost), result);
+=======
+        if !update_syscall_base_costs {
+            let cost = n / compute_budget.cpi_bytes_per_unit;
+            question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+        };
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let dst = question_mark!(
             translate_slice_mut::<u8>(memory_mapping, dst_addr, n, self.loader_id, true),
             result
@@ -1411,7 +1570,25 @@ impl<'a> SyscallObject<BpfError> for SyscallMemmove<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(n / self.cost), result);
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        question_mark!(mem_op_consume(&invoke_context, n), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let dst = question_mark!(
             translate_slice_mut::<u8>(memory_mapping, dst_addr, n, self.loader_id, true),
             result
@@ -1443,7 +1620,25 @@ impl<'a> SyscallObject<BpfError> for SyscallMemcmp<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(n / self.cost), result);
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        question_mark!(mem_op_consume(&invoke_context, n), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let s1 = question_mark!(
             translate_slice::<u8>(memory_mapping, s1_addr, n, self.loader_id, true),
             result
@@ -1488,7 +1683,25 @@ impl<'a> SyscallObject<BpfError> for SyscallMemset<'a> {
         memory_mapping: &MemoryMapping,
         result: &mut Result<u64, EbpfError<BpfError>>,
     ) {
+<<<<<<< HEAD
         question_mark!(self.compute_meter.consume(n / self.cost), result);
+=======
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        question_mark!(mem_op_consume(&invoke_context, n), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let s = question_mark!(
             translate_slice_mut::<u8>(memory_mapping, s_addr, n, self.loader_id, true),
             result
@@ -1593,6 +1806,271 @@ impl<'a> SyscallObject<BpfError> for SyscallSecp256k1Recover<'a> {
     }
 }
 
+<<<<<<< HEAD
+=======
+pub struct SyscallZkTokenElgamalOp<'a, 'b> {
+    invoke_context: Rc<RefCell<&'a mut InvokeContext<'b>>>,
+}
+
+impl<'a, 'b> SyscallObject<BpfError> for SyscallZkTokenElgamalOp<'a, 'b> {
+    fn call(
+        &mut self,
+        op: u64,
+        ct_0_addr: u64,
+        ct_1_addr: u64,
+        ct_result_addr: u64,
+        _arg5: u64,
+        memory_mapping: &MemoryMapping,
+        result: &mut Result<u64, EbpfError<BpfError>>,
+    ) {
+        use solana_zk_token_sdk::zk_token_elgamal::{ops, pod};
+
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let cost = invoke_context.get_compute_budget().zk_token_elgamal_op_cost;
+        question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+
+        let ct_0 = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_0_addr, &loader_id),
+            result
+        );
+        let ct_1 = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_1_addr, &loader_id),
+            result
+        );
+
+        if let Some(ct_result) = match op {
+            ops::OP_ADD => ops::add(ct_0, ct_1),
+            ops::OP_SUB => ops::subtract(ct_0, ct_1),
+            _ => None,
+        } {
+            *question_mark!(
+                translate_type_mut::<pod::ElGamalCiphertext>(
+                    memory_mapping,
+                    ct_result_addr,
+                    &loader_id,
+                ),
+                result
+            ) = ct_result;
+            *result = Ok(0);
+        } else {
+            *result = Ok(1);
+        }
+    }
+}
+
+pub struct SyscallZkTokenElgamalOpWithLoHi<'a, 'b> {
+    invoke_context: Rc<RefCell<&'a mut InvokeContext<'b>>>,
+}
+
+impl<'a, 'b> SyscallObject<BpfError> for SyscallZkTokenElgamalOpWithLoHi<'a, 'b> {
+    fn call(
+        &mut self,
+        op: u64,
+        ct_0_addr: u64,
+        ct_1_lo_addr: u64,
+        ct_1_hi_addr: u64,
+        ct_result_addr: u64,
+        memory_mapping: &MemoryMapping,
+        result: &mut Result<u64, EbpfError<BpfError>>,
+    ) {
+        use solana_zk_token_sdk::zk_token_elgamal::{ops, pod};
+
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let cost = invoke_context.get_compute_budget().zk_token_elgamal_op_cost;
+        question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+
+        let ct_0 = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_0_addr, &loader_id),
+            result
+        );
+        let ct_1_lo = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_1_lo_addr, &loader_id),
+            result
+        );
+        let ct_1_hi = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_1_hi_addr, &loader_id),
+            result
+        );
+
+        if let Some(ct_result) = match op {
+            ops::OP_ADD => ops::add_with_lo_hi(ct_0, ct_1_lo, ct_1_hi),
+            ops::OP_SUB => ops::subtract_with_lo_hi(ct_0, ct_1_lo, ct_1_hi),
+            _ => None,
+        } {
+            *question_mark!(
+                translate_type_mut::<pod::ElGamalCiphertext>(
+                    memory_mapping,
+                    ct_result_addr,
+                    &loader_id,
+                ),
+                result
+            ) = ct_result;
+            *result = Ok(0);
+        } else {
+            *result = Ok(1);
+        }
+    }
+}
+
+pub struct SyscallZkTokenElgamalOpWithScalar<'a, 'b> {
+    invoke_context: Rc<RefCell<&'a mut InvokeContext<'b>>>,
+}
+
+impl<'a, 'b> SyscallObject<BpfError> for SyscallZkTokenElgamalOpWithScalar<'a, 'b> {
+    fn call(
+        &mut self,
+        op: u64,
+        ct_addr: u64,
+        scalar: u64,
+        ct_result_addr: u64,
+        _arg5: u64,
+        memory_mapping: &MemoryMapping,
+        result: &mut Result<u64, EbpfError<BpfError>>,
+    ) {
+        use solana_zk_token_sdk::zk_token_elgamal::{ops, pod};
+
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let cost = invoke_context.get_compute_budget().zk_token_elgamal_op_cost;
+        question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+
+        let ct = question_mark!(
+            translate_type::<pod::ElGamalCiphertext>(memory_mapping, ct_addr, &loader_id),
+            result
+        );
+
+        if let Some(ct_result) = match op {
+            ops::OP_ADD => ops::add_to(ct, scalar),
+            ops::OP_SUB => ops::subtract_from(ct, scalar),
+            _ => None,
+        } {
+            *question_mark!(
+                translate_type_mut::<pod::ElGamalCiphertext>(
+                    memory_mapping,
+                    ct_result_addr,
+                    &loader_id,
+                ),
+                result
+            ) = ct_result;
+            *result = Ok(0);
+        } else {
+            *result = Ok(1);
+        }
+    }
+}
+
+// Blake3
+pub struct SyscallBlake3<'a, 'b> {
+    invoke_context: Rc<RefCell<&'a mut InvokeContext<'b>>>,
+}
+impl<'a, 'b> SyscallObject<BpfError> for SyscallBlake3<'a, 'b> {
+    fn call(
+        &mut self,
+        vals_addr: u64,
+        vals_len: u64,
+        result_addr: u64,
+        _arg4: u64,
+        _arg5: u64,
+        memory_mapping: &MemoryMapping,
+        result: &mut Result<u64, EbpfError<BpfError>>,
+    ) {
+        let invoke_context = question_mark!(
+            self.invoke_context
+                .try_borrow()
+                .map_err(|_| SyscallError::InvokeContextBorrowFailed),
+            result
+        );
+        let compute_budget = invoke_context.get_compute_budget();
+        question_mark!(
+            invoke_context
+                .get_compute_meter()
+                .consume(compute_budget.sha256_base_cost),
+            result
+        );
+
+        let loader_id = question_mark!(
+            invoke_context
+                .transaction_context
+                .get_loader_key()
+                .map_err(SyscallError::InstructionError),
+            result
+        );
+        let hash_result = question_mark!(
+            translate_slice_mut::<u8>(
+                memory_mapping,
+                result_addr,
+                blake3::HASH_BYTES as u64,
+                &loader_id,
+            ),
+            result
+        );
+        let mut hasher = blake3::Hasher::default();
+        if vals_len > 0 {
+            let vals = question_mark!(
+                translate_slice::<&[u8]>(memory_mapping, vals_addr, vals_len, &loader_id),
+                result
+            );
+            for val in vals.iter() {
+                let bytes = question_mark!(
+                    translate_slice::<u8>(
+                        memory_mapping,
+                        val.as_ptr() as u64,
+                        val.len() as u64,
+                        &loader_id,
+                    ),
+                    result
+                );
+
+                let cost = compute_budget.sha256_byte_cost * (val.len() as u64 / 2);
+                question_mark!(invoke_context.get_compute_meter().consume(cost), result);
+
+                hasher.hash(bytes);
+            }
+        }
+        hash_result.copy_from_slice(&hasher.result().to_bytes());
+        *result = Ok(0);
+    }
+}
+
+>>>>>>> 2aa113fd8 (Update syscall base costs)
 // Cross-program invocation syscalls
 
 struct AccountReferences<'a> {
@@ -3225,6 +3703,7 @@ mod tests {
         )
         .unwrap();
 
+<<<<<<< HEAD
         let mut result: Result<u64, EbpfError<BpfError>> = Ok(0);
         syscall_sol_log.call(
             0x100000000,
@@ -3239,6 +3718,14 @@ mod tests {
         assert_eq!(log.borrow().len(), 1);
         assert_eq!(log.borrow()[0], "Program log: Gaggablaghblagh!");
 
+=======
+        syscall_sol_log
+            .invoke_context
+            .borrow_mut()
+            .get_compute_meter()
+            .borrow_mut()
+            .mock_set_remaining(400 - 1);
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let mut result: Result<u64, EbpfError<BpfError>> = Ok(0);
         syscall_sol_log.call(
             0x100000001, // AccessViolation
@@ -3579,10 +4066,23 @@ mod tests {
             &config,
         )
         .unwrap();
+<<<<<<< HEAD
         let compute_meter: Rc<RefCell<dyn ComputeMeter>> =
             Rc::new(RefCell::new(MockComputeMeter {
                 remaining: (bytes1.len() + bytes2.len()) as u64,
             }));
+=======
+
+        invoke_context
+            .get_compute_meter()
+            .borrow_mut()
+            .mock_set_remaining(
+                (invoke_context.get_compute_budget().sha256_base_cost
+                    + ((bytes1.len() + bytes2.len()) as u64 / 2)
+                        * invoke_context.get_compute_budget().sha256_byte_cost)
+                    * 4,
+            );
+>>>>>>> 2aa113fd8 (Update syscall base costs)
         let mut syscall = SyscallSha256 {
             sha256_base_cost: 0,
             sha256_byte_cost: 2,
